@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vma — give an AI agent a VirtualBox machine</title>
+<meta name="description" content="The agent sees its screen, uses its mouse and keyboard, and runs scripts and moves files inside it. One small Windows executable: an MCP server for agents, a command line for scripts.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="vma-logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="vma-icon.png">
+<meta property="og:title" content="vma">
+<meta property="og:description" content="Give an AI agent a VirtualBox machine: its screen, mouse and keyboard, and the scripts and files inside it.">
+<meta property="og:image" content="https://guimadaleno.com/vma/vma-icon.png">
+<meta property="og:type" content="website">
+<style>
+/* ------------------------------------------------------------------ tokens
+   The ground, the ink and the terminal are those of the other tools' pages
+   on guimadaleno.com; the green is vma's own, a machine that's on. Light is
+   the whole palette, dark reassigns. Each pair that carries text holds
+   4.5:1 or more on its ground. */
+:root {
+  --ground: #f6f4f1; --raised: #ffffff; --ink: #1c1a18; --muted: #6b655f;
+  --rule: #e2ddd7;   /* a line, never text */
+  --grid: #d9d3cc;   /* the backdrop's cells, never text */
+  --mark: #1c1a18;
+  --accent: #2c7a4b; /* links: 4.8:1 */
+  --btn: #2c7a4b;    /* white on it: 5.3:1 */
+  --dot: #3a9160;    /* the backdrop's and the mark's keys, a graphic */
+  /* The terminal stays a terminal in both themes. */
+  --term: #131211; --term-ink: #ece8e3; --term-gray: #9a948d; --term-rule: #2c2926;
+  --term-accent: #6cc792;
+  --term-edge: #131211; /* none on the light ground; a line on the dark */
+  /* Motion, named by its job. */
+  --roll-out: 160ms; --roll-in: 220ms; --roll-gap: 60ms; --panel-in: 180ms; --hover: 150ms;
+  --ease-out: cubic-bezier(.2, 0, 0, 1); --ease-in: cubic-bezier(.4, 0, 1, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #131211; --raised: #1c1a18; --ink: #ece8e3; --muted: #9a948d; --rule: #2c2926;
+    --grid: #2e2b28; --mark: #ece8e3; --accent: #6cc792; --dot: #58b27f; --term: #0d0c0b; --term-edge: #2c2926;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #131211; --raised: #1c1a18; --ink: #ece8e3; --muted: #9a948d; --rule: #2c2926;
+  --grid: #2e2b28; --mark: #ece8e3; --accent: #6cc792; --dot: #58b27f; --term: #0d0c0b; --term-edge: #2c2926;
+}
+
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+:root[data-still] *, :root[data-still] *::before, :root[data-still] *::after { animation: none !important; transition: none !important; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  /* No web font, as on the family's other pages: the system's own face. */
+  font: 400 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+code { font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ------------------------------------------------------------------ backdrop
+   The family's cells, faint behind the hero and gone before the sections, so
+   nothing under the facts moves. In them, keys are typed: only transform
+   and opacity move, which the browser composes without repainting. */
+.backdrop { position: absolute; top: 0; left: 0; right: 0; height: 760px; overflow: hidden; pointer-events: none; background: radial-gradient(circle, var(--grid) 1px, transparent 1.5px) 0 0 / 24px 24px; -webkit-mask-image: radial-gradient(ellipse 90% 85% at 50% 0, #000 35%, transparent 100%); mask-image: radial-gradient(ellipse 90% 85% at 50% 0, #000 35%, transparent 100%); }
+.backdrop > * { position: absolute; top: 0; left: 0; opacity: 0; will-change: transform, opacity; }
+/* A key typed: the grid's own dot, grown and in colour. */
+.backdrop .lit { width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--dot); }
+/* The caret runs just ahead of the last key typed. */
+.backdrop .caret { width: 2px; height: 16px; margin: -8px 0 0 10px; border-radius: 1px; background: var(--dot); }
+main { position: relative; }
+
+/* ------------------------------------------------------------------ hero */
+.hero { padding: 88px 0 24px; text-align: center; }
+.logo { display: inline-flex; align-items: center; gap: 14px; margin: 0; }
+.logo svg { width: 52px; height: 52px; flex: none; }
+.name { margin: 0; font: 600 46px/1 ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace; letter-spacing: -.02em; }
+.claim { font-size: 34px; line-height: 1.18; font-weight: 600; letter-spacing: -.018em; max-width: 620px; margin: 22px auto 0; text-wrap: balance; }
+.lead { font-size: 19px; line-height: 1.55; color: var(--muted); max-width: 600px; margin: 14px auto 36px; text-wrap: balance; }
+
+/* The install box: a terminal's window, its tabs in the title bar and the
+   copy beside them, so the line gets the box's whole width on a phone. */
+.install { max-width: 720px; margin: 0 auto; background: var(--term); border: 1px solid var(--term-edge); border-radius: 12px; text-align: left; box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 18px 44px -18px rgba(0, 0, 0, .35); }
+/* The tabs' words and Copy's share a baseline; Copy then stands as far
+   from the box's top as from its right. */
+.install-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 10px 0 12px; border-bottom: 1px solid var(--term-rule); }
+.tabs { display: flex; gap: 4px; }
+.tabs button { position: relative; border: 0; background: none; color: var(--term-gray); font: 600 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 9px 8px 11px; cursor: pointer; border-radius: 6px 6px 0 0; transition: color var(--hover) var(--ease-out); }
+.tabs button::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--term-accent); transform: scaleX(0); transition: transform var(--panel-in) var(--ease-out); }
+.tabs button:hover { color: var(--term-ink); }
+.tabs button[aria-selected="true"] { color: var(--term-ink); }
+.tabs button[aria-selected="true"]::after { transform: none; }
+.tabs button:focus-visible { outline: 2px solid var(--term-accent); outline-offset: -2px; }
+.copy { display: grid; border: 0; border-radius: 7px; background: var(--btn); color: #fff; font: 600 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 7px 14px; cursor: pointer; overflow: hidden; transition: filter var(--hover) var(--ease-out); }
+/* Darker, never lighter: white keeps 4.5:1 on it while the pointer rests
+   there, as it does right after a press. */
+.copy:hover { filter: brightness(.92); }
+.copy:active { filter: brightness(.84); }
+.copy:focus-visible { outline: 2px solid var(--term-accent); outline-offset: 2px; }
+/* Each word in the one cell, so the button is as wide as its longest and
+   never changes size; a change rolls the old word up and out, and the new
+   one in from below a moment later. */
+.copy .say { grid-area: 1 / 1; transform: translateY(120%); opacity: 0; }
+.copy .say.on { transform: none; opacity: 1; transition: transform var(--roll-in) var(--ease-out) var(--roll-gap), opacity var(--roll-in) var(--ease-out) var(--roll-gap); }
+.copy .say.off { transform: translateY(-120%); opacity: 0; transition: transform var(--roll-out) var(--ease-in), opacity var(--roll-out) var(--ease-in); }
+/* The prompt starts where the tab's word does: the head's padding and the
+   tab's, 12 + 8. */
+.panel { padding: 14px 18px 16px 20px; }
+.panel[hidden] { display: none; }
+.panel.entering { animation: panel-in var(--panel-in) var(--ease-out); }
+@keyframes panel-in { from { opacity: 0; transform: translateY(3px); } }
+/* The whole line shows, wrapped under its prompt rather than scrolled:
+   it's what the reader is about to run. It wraps between its parts, and
+   only the address breaks inside, when it can't fit a line of its own. */
+.panel code { display: block; color: var(--term-ink); font-size: 14px; line-height: 1.6; padding-left: 2ch; text-indent: -2ch; overflow-wrap: anywhere; }
+.panel code[data-prompt="PS>"] { padding-left: 4ch; text-indent: -4ch; }
+.panel code::before { content: attr(data-prompt) " "; color: var(--term-accent); }
+/* The address breaks after its host, never inside the version; inside its
+   host only where the host alone can't fit a line. */
+.panel code span { white-space: nowrap; }
+.panel code .url { white-space: normal; }
+/* The spaces between the parts are the code's own text, not a part's. */
+.panel code::selection, .panel code ::selection { background: var(--term-accent); color: var(--term); }
+
+/* Both tabs' notes hold the one cell, so a change of tab moves nothing
+   under them. */
+.notes { display: grid; max-width: 720px; margin: 14px auto 0; }
+.notes .note { grid-area: 1 / 1; margin: 0; }
+.note[data-off] { visibility: hidden; }
+.note.entering { animation: panel-in var(--panel-in) var(--ease-out); }
+.note { font-size: 14px; color: var(--muted); max-width: 720px; margin: 14px auto 0; text-wrap: balance; }
+.note code { font-size: 13px; color: var(--ink); background: var(--raised); border: 1px solid var(--rule); border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+.facts-line { font-size: 13px; color: var(--muted); max-width: 720px; margin: 6px auto 0; text-wrap: balance; }
+/* The checksum breaks, where it must, into two equal halves. */
+.facts-line .sha span { white-space: nowrap; }
+#checksum { display: block; margin-top: 2px; }
+.facts-line .sha { font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+
+/* Raised, so the backdrop's cells don't show through it. */
+.source { margin: 20px 0 0; }
+.source a { display: inline-flex; align-items: center; gap: 8px; padding: 8px 15px; border: 1px solid var(--rule); border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 14px; line-height: 1; text-decoration: none; transition: color var(--hover) var(--ease-out), border-color var(--hover) var(--ease-out); }
+.source a:hover { color: var(--ink); border-color: var(--muted); }
+.source svg { width: 16px; height: 16px; fill: currentColor; flex: none; }
+
+/* ------------------------------------------------------------------ facts */
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 72px 0 8px; }
+.cols div { background: var(--raised); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 20px 20px; }
+.cols h2 { margin: 0 0 6px; font-size: 16px; line-height: 1.3; }
+.cols p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+.cols code { font-size: .9em; color: var(--ink); }
+
+footer .links { display: inline-flex; gap: 16px; }
+footer { margin-top: 64px; padding: 24px 0 48px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center; }
+
+@media (max-width: 760px) {
+  .cols { grid-template-columns: minmax(0, 1fr); gap: 12px; padding-top: 48px; }
+}
+@media (max-width: 480px) {
+  .hero { padding-top: 72px; }
+  .logo svg { width: 44px; height: 44px; }
+  .name { font-size: 40px; }
+  .claim { font-size: 27px; margin-top: 18px; }
+  .lead { font-size: 17px; margin-bottom: 28px; }
+  .install-head { padding-left: 6px; }
+  .panel { padding: 12px 14px 14px; }
+  .panel code { font-size: 13px; }
+}
+/* The smallest phones: the host of the address still fits a line. */
+@media (max-width: 360px) {
+  .hero { padding-top: 64px; }
+  .name { font-size: 36px; }
+  .logo svg { width: 40px; height: 40px; }
+  .claim { font-size: 24px; }
+  .lead { font-size: 16px; margin-bottom: 24px; }
+  .panel code { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="backdrop" id="backdrop" aria-hidden="true"></div>
+<main class="wrap">
+  <section class="hero">
+    <div class="logo">
+      <!-- The mark: a machine's screen, keys typed on it. tools/icon.py
+           draws the same for the tab and the lists. Still: the backdrop is
+           the one thing that moves. -->
+      <svg viewBox="0 0 52 52" aria-hidden="true">
+        <rect x="4.5" y="8.5" width="43" height="31" rx="7" fill="none" stroke="var(--mark)" stroke-width="5"/>
+        <path d="M17 46.5h18" stroke="var(--mark)" stroke-width="5" stroke-linecap="round"/>
+        <g fill="var(--dot)"><circle cx="14.5" cy="24" r="2.6"/><circle cx="21.5" cy="24" r="2.6"/><circle cx="28.5" cy="24" r="2.6"/><rect x="33.5" y="18" width="3" height="12" rx="1.5"/></g>
+      </svg>
+      <h1 class="name">vma</h1>
+    </div>
+    <p class="claim">Give an AI agent a VirtualBox machine.</p>
+    <p class="lead">The agent sees its screen, uses its mouse and keyboard, and runs scripts and moves files inside it. One small Windows executable: an MCP server for agents, a command line for scripts.</p>
+
+    <div class="install">
+      <div class="install-head">
+        <div class="tabs" role="tablist" aria-label="Install from">
+          <button type="button" role="tab" id="tab-wsl" aria-selected="true" aria-controls="panel-wsl">WSL</button>
+          <button type="button" role="tab" id="tab-ps" aria-selected="false" aria-controls="panel-ps" tabindex="-1">PowerShell</button>
+        </div>
+        <button type="button" class="copy" id="copy" data-copy="line-wsl" aria-describedby="said"><span class="say on" data-say="rest">Copy</span><span class="say" data-say="done" aria-hidden="true">Copied</span><span class="say" data-say="manual" aria-hidden="true">Ctrl+C</span></button>
+      </div>
+      <div class="panel" id="panel-wsl" role="tabpanel" aria-labelledby="tab-wsl">
+        <code id="line-wsl" data-prompt="$"><span>d=$(wslpath "$(powershell.exe</span> <span>-NoProfile -Command</span> <span>'$env:LOCALAPPDATA'</span> <span>| tr -d '\r')")/Programs/vma</span> <span>&amp;&amp; mkdir -p "$d" ~/.local/bin</span> <span>&amp;&amp; curl -fsSLo "$d/vma.exe"</span> <span class="url">https://download.guimadaleno.com/<wbr>vma/0.1.0/vma.exe</span> <span>&amp;&amp; ln -sf "$d/vma.exe"</span> <span>~/.local/bin/vma</span></code>
+      </div>
+      <div class="panel" id="panel-ps" role="tabpanel" aria-labelledby="tab-ps" hidden>
+        <code id="line-ps" data-prompt="PS>"><span>curl.exe -fsSLo vma.exe</span> <span class="url">https://download.guimadaleno.com/<wbr>vma/0.1.0/vma.exe</span><span>;</span> <span>.\vma.exe help</span></code>
+      </div>
+    </div>
+    <span class="sr" id="said" aria-live="polite"></span>
+    <div class="notes">
+    <p class="note" data-for="panel-wsl">It puts <code>vma.exe</code> on Windows' disk and links it as <code>~/.local/bin/vma</code>, which a new terminal finds. Then, for Claude&nbsp;Code, <code>claude mcp add vma -- vma mcp</code>, or <code>vma help</code>.</p>
+    <p class="note" data-for="panel-ps" data-off>It downloads <code>vma.exe</code> into the folder you are in, and shows its help.</p>
+    </div>
+    <p class="facts-line">Version <span id="version">0.1.0</span>, <span id="size">645 KB</span>, for Windows with VirtualBox 7.2 or a later 7.x. <span id="checksum">Its SHA-256 is in <a href="https://download.guimadaleno.com/vma/SHA256SUMS">SHA256SUMS</a>.</span></p>
+    <!-- The source, right where the reader decides to trust the file. -->
+    <p class="source"><a href="https://github.com/guimadaleno/vma"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>Source on GitHub</a></p>
+  </section>
+
+  <section class="cols">
+    <div><h2>For agents</h2><p>What it does on the command line it does as MCP tools too, with pictures in their results, on MCP 2026-07-28 and the versions before it.</p></div>
+    <div><h2>Quick</h2><p>A picture of the screen in 23 ms, a key in 6, through MCP. Keys go at the pace the machine reads them, so a slow one loses none.</p></div>
+    <div><h2>Inside, too</h2><p>It installs Windows on a new machine with no one at it. Its helper there runs scripts, moves files, and finds windows and buttons by name.</p></div>
+  </section>
+
+  <footer>
+    <span>Made by Guilherme Madaleno</span>
+    <span class="links"><a href="https://guimadaleno.com">guimadaleno.com</a><a href="https://github.com/guimadaleno/vma">GitHub</a></span>
+  </footer>
+</main>
+
+<script>
+'use strict';
+
+// The newest release, from the signed manifest every download is listed
+// in. If it can't be read, the markup above already says something true.
+fetch('https://download.guimadaleno.com/vma/latest.json', { cache: 'no-cache' })
+  .then(function (response) { return response.ok ? response.json() : Promise.reject(); })
+  .then(function (manifest) {
+    var release = JSON.parse(manifest.release);
+    var file = (release.files || []).filter(function (f) { return f.name === 'vma.exe'; })[0];
+    // What goes into a line the reader runs is checked here, where it
+    // enters: only a release's own address, a version, a size and a hash.
+    if (!file || !/^\d+\.\d+\.\d+$/.test(release.version) || !/^[0-9a-f]{64}$/.test(file.sha256) ||
+        !(file.size > 0) || file.url !== 'https://download.guimadaleno.com/vma/' + release.version + '/vma.exe') return;
+    var host = file.url.indexOf('/', 8) + 1;
+    document.querySelectorAll('.url').forEach(function (url) {
+      url.textContent = '';
+      url.append(file.url.slice(0, host), document.createElement('wbr'), file.url.slice(host));
+    });
+    document.getElementById('version').textContent = release.version;
+    document.getElementById('size').textContent = Math.round(file.size / 1024) + ' KB';
+    var checksum = document.getElementById('checksum');
+    checksum.textContent = 'SHA-256 ';
+    var sha = document.createElement('span');
+    sha.className = 'sha';
+    var half = Math.ceil(file.sha256.length / 2);
+    [file.sha256.slice(0, half), file.sha256.slice(half)].forEach(function (part, i) {
+      if (i) sha.appendChild(document.createElement('wbr'));
+      sha.appendChild(document.createElement('span')).textContent = part;
+    });
+    checksum.appendChild(sha);
+    // The words grew: the backdrop keeps clear of them again.
+    if (window.vmaBuild) window.vmaBuild();
+  })
+  .catch(function () {});
+
+// Copy: the line on the tab chosen. A second press while it says Copied
+// changes nothing but when it goes back. Where the browser refuses the
+// clipboard, the line is selected for Ctrl+C, and the button says so.
+(function () {
+  var button = document.getElementById('copy');
+  var said = document.getElementById('said');
+  var back;
+  function say(state) {
+    var now = button.querySelector('.say.on');
+    var next = button.querySelector('[data-say="' + state + '"]');
+    if (now === next) return;
+    // The word that left last time goes back below at once, unseen, so it
+    // comes in from below when its turn comes again.
+    button.querySelectorAll('.say.off').forEach(function (word) { word.classList.remove('off'); });
+    void button.offsetWidth;
+    now.classList.remove('on');
+    now.classList.add('off');
+    now.setAttribute('aria-hidden', 'true');
+    next.removeAttribute('aria-hidden');
+    next.classList.add('on');
+  }
+  function rest() { clearTimeout(back); say('rest'); said.textContent = ''; }
+  function select(code) {
+    var range = document.createRange();
+    range.selectNodeContents(code);
+    var selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+  button.addEventListener('click', function () {
+    var code = document.getElementById(button.dataset.copy);
+    function done(state, words) {
+      say(state);
+      said.textContent = words;
+      clearTimeout(back);
+      back = setTimeout(rest, state === 'done' ? 1500 : 4000);
+    }
+    function manual() { select(code); done('manual', 'The line is selected: press Ctrl+C to copy it.'); }
+    if (!navigator.clipboard || !window.isSecureContext) return manual();
+    navigator.clipboard.writeText(code.textContent).then(function () { done('done', 'Copied.'); }, manual);
+  });
+  window.vmaCopyRest = rest;
+})();
+
+// The tabs. Without this script, the WSL line shows, and Copy copies it.
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs [role="tab"]'));
+  var button = document.getElementById('copy');
+  function open(tab, focus, moved) {
+    tabs.forEach(function (each) {
+      var on = each === tab;
+      var panel = document.getElementById(each.getAttribute('aria-controls'));
+      each.setAttribute('aria-selected', on);
+      each.tabIndex = on ? 0 : -1;
+      if (on && panel.hidden && moved) {
+        panel.classList.remove('entering');
+        void panel.offsetWidth;
+        panel.classList.add('entering');
+      }
+      panel.hidden = !on;
+      var note = document.querySelector('.note[data-for="' + panel.id + '"]');
+      if (on && note.hasAttribute('data-off') && moved) {
+        note.classList.remove('entering');
+        void note.offsetWidth;
+        note.classList.add('entering');
+      }
+      note.toggleAttribute('data-off', !on);
+      if (on) button.dataset.copy = panel.querySelector('code').id;
+    });
+    window.vmaCopyRest();
+    if (focus) tab.focus();
+  }
+  tabs.forEach(function (tab, i) {
+    tab.addEventListener('click', function () { open(tab, false, true); });
+    tab.addEventListener('keydown', function (event) {
+      var to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[event.key];
+      if (to === undefined) return;
+      event.preventDefault();
+      open(tabs[(to + tabs.length) % tabs.length], true, true);
+    });
+  });
+})();
+
+// The backdrop: keys typed in the cells, by two typists, one each side of
+// the words and a little apart in time. It is laid out once, from a fixed
+// seed and the page's own layout, as Web Animations that loop: no timer and
+// no chance decide what shows, so a film of it is the same each time. It is
+// laid out again when the page changes size, and not at all where motion
+// is turned off: then only the cells show. #dark or #light, and -still,
+// hold a theme and the backdrop: how screenshots are taken.
+(function () {
+  var CELL = 24;
+  // A key every 85 ms; a run held 1.1 s, fading in 0.52 s, and the next
+  // 0.7 s later. The second typist starts 1.4 s after the first.
+  var KEY = 85, HOLD = 1100, FADE = 520, GAP = 700, RUNS = 6, MAX = 9, LATER = 1400;
+  var EPS = 2, OUT = 'cubic-bezier(.2, 0, 0, 1)';
+  var backdrop = document.getElementById('backdrop');
+  var root = document.documentElement;
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)');
+
+  // mulberry32: a small generator, the same numbers for the same seed.
+  function generator(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  // The words' boxes, widened, in the backdrop's own coordinates: nothing
+  // moves behind them, since a mark between letters reads as one of them.
+  function boxes() {
+    var origin = backdrop.getBoundingClientRect();
+    return Array.prototype.map.call(document.querySelectorAll('.logo, .claim, .lead, .install, .notes, .facts-line, .source'), function (element) {
+      var box = element.getBoundingClientRect();
+      // The name gets more room to its sides: a cell lit beside it reads
+      // as its full stop.
+      var side = element.classList.contains('logo') ? 72 : 26;
+      return { left: box.left - origin.left - side, right: box.right - origin.left + side, top: box.top - origin.top - 26, bottom: box.bottom - origin.top + 22 };
+    });
+  }
+
+  function layout() {
+    var width = backdrop.clientWidth;
+    // Below about two thirds of its height the mask has faded it out.
+    var height = Math.min(backdrop.clientHeight * 0.68, document.querySelector('.source').getBoundingClientRect().bottom - backdrop.getBoundingClientRect().top + 48);
+    var words = boxes();
+    function clear(x, y) {
+      // Away from the window's sides, where a key reads as a stray dot,
+      // and not the top row: a run along the page's edge reads as a bar
+      // of progress.
+      if (x < CELL * 1.5 || x > width - CELL * 1.5 || y < CELL || y > height) return false;
+      return words.every(function (b) { return x < b.left || x > b.right || y < b.top || y > b.bottom; });
+    }
+    var cells = [];
+    for (var y = CELL / 2; y <= height; y += CELL)
+      for (var x = CELL / 2; x <= width; x += CELL)
+        if (clear(x, y)) cells.push({ x: x, y: y });
+    return { width: width, clear: clear, cells: cells };
+  }
+
+  function place(x, y, scale) { return 'translate(' + x + 'px, ' + y + 'px)' + (scale === undefined ? '' : ' scale(' + scale + ')'); }
+  function add(className) {
+    var element = document.createElement('i');
+    element.className = className;
+    return backdrop.appendChild(element);
+  }
+  // Keyframes from moments in ms, made into a loop of `total` ms.
+  function loop(element, moments, total, delay) {
+    var frames = moments.map(function (m) {
+      var frame = { offset: Math.min(1, Math.max(0, m.at / total)), opacity: m.opacity, transform: m.transform };
+      if (m.easing) frame.easing = m.easing;
+      return frame;
+    });
+    frames.sort(function (a, b) { return a.offset - b.offset; });
+    element.animate(frames, { duration: total, iterations: Infinity, delay: delay });
+  }
+
+  // One typist, in the cells between `from` and `to` across the page.
+  function typist(space, random, from, to, delay) {
+    var runs = [], t = 0;
+    for (var tries = 0; runs.length < RUNS && tries < 400; tries++) {
+      var cell = space.cells[Math.floor(random() * space.cells.length)];
+      var length = 4 + Math.floor(random() * (MAX - 3));
+      var ok = cell.x >= from && cell.x + length * CELL <= to;
+      for (var i = 0; i < length + 1 && ok; i++) ok = space.clear(cell.x + i * CELL, cell.y);
+      if (!ok) continue;
+      // Each run away from the last; where the cells are one row, as on a
+      // phone, at least starting elsewhere, so no run repeats in place.
+      var last = runs[runs.length - 1];
+      var near = last && Math.abs(last.y - cell.y) < 3 * CELL && Math.abs(last.x - cell.x) < 8 * CELL;
+      if (near && (tries < 200 || Math.abs(last.x - cell.x) < 2 * CELL)) continue;
+      runs.push({ x: cell.x, y: cell.y, length: length, start: t });
+      t += (length - 1) * KEY + HOLD + FADE + GAP;
+    }
+    if (!runs.length) return;
+    var total = t;
+    for (var j = 0; j < MAX; j++) {
+      var moments = [{ at: 0, opacity: 0, transform: place(runs[0].x + j * CELL, runs[0].y, 0.4) }];
+      runs.forEach(function (run) {
+        if (j >= run.length) return;
+        var x = run.x + j * CELL, on = run.start + j * KEY, end = run.start + (run.length - 1) * KEY + HOLD;
+        moments.push({ at: on - EPS, opacity: 0, transform: place(x, run.y, 0.4) });
+        moments.push({ at: on + 90, opacity: 1, transform: place(x, run.y, 1.3), easing: OUT });
+        moments.push({ at: on + 260, opacity: 1, transform: place(x, run.y, 1.1) });
+        moments.push({ at: end, opacity: 1, transform: place(x, run.y, 1.1), easing: OUT });
+        moments.push({ at: end + FADE, opacity: 0, transform: place(x, run.y, 0.6) });
+      });
+      moments.push({ at: total, opacity: 0, transform: place(runs[0].x + j * CELL, runs[0].y, 0.4) });
+      loop(add('lit'), moments, total, delay);
+    }
+    var caret = [{ at: 0, opacity: 0, transform: place(runs[0].x, runs[0].y) }];
+    runs.forEach(function (run) {
+      var lastKey = run.start + (run.length - 1) * KEY, end = lastKey + HOLD, at = run.x + (run.length - 1) * CELL;
+      caret.push({ at: run.start - EPS, opacity: 0, transform: place(run.x, run.y) });
+      for (var k = 0; k < run.length; k++) {
+        var on = run.start + k * KEY;
+        if (k) caret.push({ at: on - 1, opacity: 1, transform: place(run.x + (k - 1) * CELL, run.y) });
+        caret.push({ at: on, opacity: 1, transform: place(run.x + k * CELL, run.y) });
+      }
+      // Two blinks, then it goes with the run.
+      [[lastKey + 380, 1], [lastKey + 381, 0], [lastKey + 640, 0], [lastKey + 641, 1], [end, 1]].forEach(function (b) {
+        caret.push({ at: b[0], opacity: b[1], transform: place(at, run.y) });
+      });
+      caret.push({ at: end + FADE, opacity: 0, transform: place(at, run.y) });
+    });
+    caret.push({ at: total, opacity: 0, transform: place(runs[0].x, runs[0].y) });
+    loop(add('caret'), caret, total, delay);
+  }
+
+  var built = '';
+  function build() {
+    var asked = location.hash.slice(1).split('-');
+    var theme = asked.indexOf('dark') >= 0 ? 'dark' : asked.indexOf('light') >= 0 ? 'light' : '';
+    if (theme) root.dataset.theme = theme; else delete root.dataset.theme;
+    if (asked.indexOf('still') >= 0) root.dataset.still = ''; else delete root.dataset.still;
+    var still = root.hasAttribute('data-still') || reduce.matches;
+    var key = [still, backdrop.clientWidth, document.querySelector('.hero').offsetHeight].join(' ');
+    if (key === built) return;
+    built = key;
+    backdrop.getAnimations({ subtree: true }).forEach(function (a) { a.cancel(); });
+    backdrop.textContent = '';
+    if (still) return;
+    var space = layout(), random = generator(1117);
+    // Side by side where the page is wide; on a phone, the one row above
+    // the name holds one typist.
+    if (space.width < 600) return typist(space, random, 0, space.width, 0);
+    typist(space, random, 0, space.width / 2, 0);
+    typist(space, random, space.width / 2, space.width, LATER);
+  }
+
+  build();
+  var later;
+  addEventListener('resize', function () { clearTimeout(later); later = setTimeout(build, 150); });
+  addEventListener('hashchange', build);
+  reduce.addEventListener('change', build);
+  window.vmaBuild = build;
+})();
+</script>
+</body>
+</html>

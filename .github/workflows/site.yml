@@ -1,0 +1,54 @@
+# vma's page, published on its own whenever site/ changes: a sentence
+# should not wait for a release. Releases are not here: they are at
+# download.guimadaleno.com/vma/, which the page reads for its version, size
+# and checksum, so nothing here touches them.
+#
+# The page goes to page/ in vma's own bucket, which the site's Worker serves
+# at guimadaleno.com/vma/. The token is the release's, for this bucket and no
+# other. There is no --delete: a file the page stops using is left behind,
+# which costs nothing, and the bucket's other paths are the releases'.
+# Without the token the job does nothing.
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site
+  # A publish under way finishes; a newer one waits rather than cutting its
+  # upload off halfway.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    # A sync of this folder takes seconds; one stuck on the network would
+    # otherwise run for six hours.
+    timeout-minutes: 10
+    # A step's `if` cannot read secrets, so the token's presence travels
+    # through env.
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.R2_ACCESS_KEY_ID != ''
+
+      - name: Publish
+        if: env.R2_ACCESS_KEY_ID != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # Recent versions of the CLI add a checksum R2 may refuse.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: >
+          aws s3 sync site/ s3://guimadaleno-update-vma/page/
+          --endpoint-url https://a19ad1e47e79dcf2e1dd764cb0559a66.r2.cloudflarestorage.com
+          --no-progress --only-show-errors

@@ -1,0 +1,5 @@
+# What a program compiles in (its licence and notices, its words, its data) is
+# read by lines and paragraphs, so a checkout on Windows must not turn line
+# ends into CRLF: a test that splits on a blank line would fail there and
+# nowhere else.
+* text=auto eol=lf

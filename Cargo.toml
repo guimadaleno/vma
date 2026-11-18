@@ -1,0 +1,44 @@
+[package]
+name        = "vma"
+version     = "0.1.0"
+edition     = "2024"
+authors     = ["Guilherme Madaleno"]
+description = "Use a VirtualBox machine as a person at it would: its screen, mouse and keyboard, and commands and files inside it."
+repository  = "https://github.com/guimadaleno/vma"
+license     = "MIT"
+publish     = false
+
+# The core (the commands, paths between WSL and Windows) is plain Rust and
+# builds everywhere, so it is tested on any machine. Only the Windows shell
+# reaches VirtualBox, and only it has a dependency.
+#
+# Win32 and COM from Microsoft's own metadata: COM to create VirtualBox's
+# objects and call them by name (IDispatch, with its VARIANTs and SAFEARRAYs),
+# and the local time a picture's default name is made from. Inside a machine,
+# the agent's: its windows and menus, the clipboard, a process's name and
+# elevation, a mutex, and UI Automation to find a control by its name.
+[target.'cfg(windows)'.dependencies.windows]
+version  = "0.62"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Accessibility",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+# A tool an agent starts for every action has to be small to download and
+# quick to start. dist.sh holds the executable's budget.
+[profile.release]
+opt-level     = "z"
+lto           = true
+codegen-units = 1
+panic         = "abort"
+strip         = true

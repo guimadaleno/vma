@@ -1,0 +1,162 @@
+# Cutting a tag builds vma and publishes it to download.guimadaleno.com with
+# the signed manifest. The executable is the whole release: the page offers
+# it as it is, a command-line tool that runs where it is put. The publishing
+# is guimadaleno/base's release action, the same for every app;
+# release/README.md's "A new app" is what has to exist before the first tag
+# (the bucket, the R2 token, the release key and update.pub).
+#
+# Everything runs on Linux. The executable is the mingw cross-build, the same
+# one the size budget is measured against; building on Windows instead would
+# produce an MSVC binary, and the budget would start measuring something
+# nobody runs.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # The signing service downloads the build artifact through the API, which the
+  # default token cannot do with contents alone.
+  actions: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+# Each job stops at about three times its slowest run: without a limit,
+# one stuck on a download runs for six hours.
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Signing is opt-in and stays off until the secrets exist: a program
+    # without a certificate cuts exactly the release it cuts today, unsigned,
+    # with no step failing to say so. `secrets` cannot be read from a step's
+    # `if`, which is why the id comes through the environment.
+    env:
+      SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The tag and Cargo.toml must agree
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -1)
+          echo "tag=$tag  Cargo.toml=$cargo"
+          if [ "$tag" != "$cargo" ]; then
+            echo "::error::the tag and Cargo.toml disagree about the version"
+            exit 1
+          fi
+
+      - name: Cross-compiler for the gnu target
+        timeout-minutes: 8
+        run: |
+          # A mirror that stalls is cut off and tried again rather than waited on,
+          # from kernel.org's copy of Ubuntu's archive: the same packages, which
+          # apt checks against Ubuntu's keys, when Canonical's own mirrors cannot
+          # be reached, as when its DNS fell for hours.
+          for try in 1 2 3; do
+            if [ "$try" != 1 ]; then
+              sudo dpkg --configure -a
+              sudo sed -i -E 's#https?://(azure\.archive|archive|security)\.ubuntu\.com/#http://mirrors.edge.kernel.org/#' /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources || true
+            fi
+            timeout 45s sudo apt-get update &&
+              timeout 90s sudo apt-get install -y gcc-mingw-w64-x86-64 && break
+            [ "$try" = 3 ] && exit 1
+          done
+          rustup target add x86_64-pc-windows-gnu
+
+      # dist.sh holds the budget itself and fails the job if it is passed.
+      - name: The executable
+        run: ./dist.sh
+
+      - uses: actions/upload-artifact@v7
+        id: build
+        with:
+          name: build
+          path: dist/vma.exe
+          retention-days: 7
+
+      # The service signs artifacts rather than files: the executable goes up
+      # as the artifact above and comes back signed.
+      - name: Sign vma.exe
+        if: env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: SignPath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: vma
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: executable
+          github-artifact-id: ${{ steps.build.outputs.artifact-id }}
+          output-artifact-directory: dist
+          wait-for-completion: true
+
+      # A signature that silently did not happen is the failure worth
+      # catching: the release still publishes, the file still runs, and the
+      # first sign of it is somebody reporting SmartScreen.
+      - name: The signature must actually be there
+        if: env.SIGNPATH_ORGANIZATION_ID != ''
+        timeout-minutes: 5
+        run: |
+          # A mirror that stalls is cut off and tried again rather than waited on,
+          # from kernel.org's copy of Ubuntu's archive: the same packages, which
+          # apt checks against Ubuntu's keys, when Canonical's own mirrors cannot
+          # be reached, as when its DNS fell for hours.
+          for try in 1 2 3; do
+            if [ "$try" != 1 ]; then
+              sudo dpkg --configure -a
+              sudo sed -i -E 's#https?://(azure\.archive|archive|security)\.ubuntu\.com/#http://mirrors.edge.kernel.org/#' /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources || true
+            fi
+            timeout 90s sudo apt-get install -y osslsigncode && break
+            [ "$try" = 3 ] && exit 1
+          done
+          osslsigncode verify -in dist/vma.exe
+
+      # Overwriting rather than uploading a second name, so there is one
+      # artifact called `build` and no way for a later job to reach the
+      # unsigned one.
+      - name: Replace the artifact with the signed build
+        if: env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: build
+          path: dist/vma.exe
+          retention-days: 7
+          overwrite: true
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # The action verifies the manifest against update.pub, from here.
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: build
+          path: dist
+
+      # files/ is the executable as the manifest names it. downloads/ is what
+      # the page offers: the same executable, named for its version.
+      - name: Lay out the release
+        id: release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p out/files out/downloads
+          cp dist/vma.exe out/files/
+          cp dist/vma.exe "out/downloads/vma-$version.exe"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to download.guimadaleno.com
+        uses: guimadaleno/base/release/publish@release-v1.4.1
+        with:
+          app: vma
+          version: ${{ steps.release.outputs.version }}
+          dir: out
+          update-key: ${{ secrets.UPDATE_KEY }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}

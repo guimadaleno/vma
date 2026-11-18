@@ -1,0 +1,108 @@
+# Every push proves three things: the core is formatted, lint-free and passes
+# its tests (on Linux, where it names no platform); the Windows executable
+# cross-builds lint-free and fits its budget; and the whole suite passes on
+# Windows itself. None of it reaches VirtualBox: no runner has a machine, so
+# vma is seen working against a real one before each push (CLAUDE.md).
+#
+# Runner images are named rather than `-latest`: an image is part of what
+# ships (its mingw builds the executable the budget measures), so moving to
+# a newer one is a commit, and a release to look at.
+name: CI
+
+# Prose changes nothing these jobs check, so a push of only prose runs none
+# of them; markdown is skipped by name, never as `**.md`.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'CLAUDE.md', 'LICENSE', '.claude/**', 'site/**', 'tools/icon.py']
+  pull_request:
+    paths-ignore: ['README.md', 'CLAUDE.md', 'LICENSE', '.claude/**', 'site/**', 'tools/icon.py']
+  workflow_dispatch:
+
+# A newer push makes an older run's verdict moot.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Each job stops at about three times its slowest run (the first, with no
+# cache: core 28 s, windows-build 61 s, windows-tests 55 s): without a
+# limit, one stuck on a download runs for six hours. windows-build keeps 10
+# minutes for its cross-compiler's retried downloads.
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ github.job }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ github.job }}-
+      - name: Format
+        run: cargo fmt --check
+      - name: Lints
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Core tests
+        run: cargo test
+
+  windows-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ github.job }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ github.job }}-
+      - name: Cross-compiler for the gnu target
+        timeout-minutes: 8
+        run: |
+          # A mirror that stalls is cut off and tried again rather than waited on,
+          # from kernel.org's copy of Ubuntu's archive: the same packages, which
+          # apt checks against Ubuntu's keys, when Canonical's own mirrors cannot
+          # be reached, as when its DNS fell for hours.
+          for try in 1 2 3; do
+            if [ "$try" != 1 ]; then
+              sudo dpkg --configure -a
+              sudo sed -i -E 's#https?://(azure\.archive|archive|security)\.ubuntu\.com/#http://mirrors.edge.kernel.org/#' /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources || true
+            fi
+            timeout 45s sudo apt-get update &&
+              timeout 90s sudo apt-get install -y gcc-mingw-w64-x86-64 && break
+            [ "$try" = 3 ] && exit 1
+          done
+          rustup target add x86_64-pc-windows-gnu
+      - name: Lints of the Windows shell
+        run: cargo clippy --target x86_64-pc-windows-gnu --all-targets -- -D warnings
+      # dist.sh fails the job if the executable passes its budget.
+      - name: The executable
+        run: ./dist.sh
+
+  windows-tests:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ github.job }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ github.job }}-
+      - name: Tests, including the Windows shell's
+        run: cargo test
