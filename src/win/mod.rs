@@ -843,8 +843,15 @@ fn write(out: &Mutex<std::io::Stdout>, message: &Json) -> Result<(), String> {
 }
 
 /// Which agents answer, for `status`: given a few seconds where the share
-/// or its vma.exe came only now, and never failing the status.
+/// or its vma.exe came only now, and never failing the status. A machine
+/// without its folder never had the agent, and is left as it was: nothing
+/// shared with it, copied or asked.
 fn agent_line(console: &Console) -> String {
+    match link::folder(console.name()) {
+        Ok(folder) if !folder.is_dir() => return "not answering: vma setup".into(),
+        Ok(_) => {}
+        Err(why) => return format!("not reachable: {why}"),
+    }
     let link = match Link::open(console) {
         Ok(link) => link,
         Err(why) => return format!("not reachable: {why}"),

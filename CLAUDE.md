@@ -4,7 +4,7 @@ VMA (VirtualBox Machine Agent) lets an agent use a VirtualBox machine as a
 person at it would (its screen, mouse and keyboard), and do inside it what a
 test needs. It is one small Windows executable, `vma.exe`, that is both a CLI
 and an MCP server (`vma mcp`), and it replaced base's `vm`. What is left
-is in the issues: #4 next, then the plans, #1 to #3.
+is in the issues: the goal #8 next, then the plans, #1 to #3.
 
 ## Decided
 
