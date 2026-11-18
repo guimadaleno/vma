@@ -109,4 +109,4 @@ median of five calls on one server: `click` 140 ms, `keys enter` 6 ms,
 `shot` 23 ms, `type` of 99 characters 529 ms. Inside, against `vm`'s
 agent: `read` 119 ms against 744, `windows` 118 against 756, `run` of a
 one-line script 3.1 s against 3.3 (PowerShell's own start). The
-executable: 642 KB.
+executable: 645 KB.

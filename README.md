@@ -7,7 +7,7 @@ sees its screen, uses its mouse and keyboard, and runs scripts and moves
 files inside it. One small Windows executable, quick to start for every
 action: an MCP server for agents, a command line for scripts.
 
-Version 0.1.0 makes, changes, starts, stops and removes
+Version 0.1.1 makes, changes, starts, stops and removes
 machines and their media, installs Windows on a new one with no one at it,
 reads a machine's state, takes a picture of its screen, uses its mouse and
 keyboard, and runs scripts, moves files and finds windows and controls
