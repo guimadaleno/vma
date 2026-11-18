@@ -61,7 +61,7 @@ jobs:
           for try in 1 2 3; do
             if [ "$try" != 1 ]; then
               sudo dpkg --configure -a
-              sudo sed -i -E 's#https?://(azure\.archive|archive|security)\.ubuntu\.com/#http://mirrors.edge.kernel.org/#' /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources || true
+              sudo sed -i -E 's#https?://([a-z0-9-]+\.)*(archive|security)\.ubuntu\.com/#http://mirrors.edge.kernel.org/#' /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources || true
             fi
             timeout 45s sudo apt-get update &&
               timeout 90s sudo apt-get install -y gcc-mingw-w64-x86-64 && break
@@ -109,7 +109,7 @@ jobs:
           for try in 1 2 3; do
             if [ "$try" != 1 ]; then
               sudo dpkg --configure -a
-              sudo sed -i -E 's#https?://(azure\.archive|archive|security)\.ubuntu\.com/#http://mirrors.edge.kernel.org/#' /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources || true
+              sudo sed -i -E 's#https?://([a-z0-9-]+\.)*(archive|security)\.ubuntu\.com/#http://mirrors.edge.kernel.org/#' /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources || true
             fi
             timeout 90s sudo apt-get install -y osslsigncode && break
             [ "$try" = 3 ] && exit 1
