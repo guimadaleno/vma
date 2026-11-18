@@ -48,7 +48,7 @@ pub fn state_word(state: u32) -> &'static str {
 /// The machine a call means when it names none: the only one online, or
 /// else the only one there is. `machines` holds each one's name and state;
 /// the answer is an index into it. `ask` says how a call names one, as
-/// "set VMA_NAME to one".
+/// "name one with --machine NAME or VMA_NAME".
 pub fn choose(machines: &[(String, u32)], ask: &str) -> Result<usize, String> {
     let online: Vec<usize> = (0..machines.len())
         .filter(|&i| is_online(machines[i].1))
@@ -126,7 +126,7 @@ pub fn size_words(bytes: i64) -> String {
 mod tests {
     use super::*;
 
-    const ASK: &str = "set VMA_NAME to one";
+    const ASK: &str = "name one with --machine NAME or VMA_NAME";
 
     fn machines(list: &[(&str, u32)]) -> Vec<(String, u32)> {
         list.iter().map(|&(n, s)| (n.to_string(), s)).collect()
@@ -157,7 +157,7 @@ mod tests {
         assert_eq!(choose(&[], ASK), Err("VirtualBox has no machine".into()));
         assert_eq!(
             choose(&machines(&[("a", 1), ("b", 2)]), ASK),
-            Err("no machine is running, and there are several (a, b): set VMA_NAME to one".into())
+            Err("no machine is running, and there are several (a, b): name one with --machine NAME or VMA_NAME".into())
         );
         assert_eq!(
             choose(&machines(&[("a", 6), ("b", 1), ("c", 7)]), "give machine"),

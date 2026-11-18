@@ -1085,7 +1085,7 @@ mod tests {
             .unwrap()
         );
         let typed = run(r#"{"text":"--look \"a\"\n"}"#, "type");
-        let Command::Input { look, .. } = command::parse(&typed.words).unwrap().unwrap() else {
+        let Command::Input { look, .. } = command::parse(&typed.words).unwrap().unwrap().0 else {
             panic!("not input");
         };
         assert!(!look);
@@ -1190,6 +1190,20 @@ mod tests {
                 "{}",
                 tool.name
             );
+        }
+    }
+
+    #[test]
+    fn a_tool_takes_a_machine_where_its_command_does() {
+        for tool in &TOOLS {
+            let words = [tool.name, "--machine", "m", "--help-me"].map(String::from);
+            let refused = command::parse(&words).unwrap_err();
+            let wanted = if tool.machine {
+                "--help-me is not an option here"
+            } else {
+                "--machine is not an option here"
+            };
+            assert!(refused.starts_with(wanted), "{}: {refused}", tool.name);
         }
     }
 }

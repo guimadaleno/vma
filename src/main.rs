@@ -16,16 +16,16 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let words: Vec<String> = std::env::args().skip(1).collect();
-    let done = command::parse(&words).and_then(|command| match command {
+    let done = command::parse(&words).and_then(|parsed| match parsed {
         None => {
             print!("{}", command::USAGE);
             Ok(0)
         }
-        Some(Command::Notices) => {
+        Some((Command::Notices, _)) => {
             print!("{}", command::NOTICES);
             Ok(0)
         }
-        Some(command) => run(command),
+        Some((command, machine)) => run(command, machine),
     });
     match done {
         Ok(0) => ExitCode::SUCCESS,
@@ -39,13 +39,13 @@ fn main() -> ExitCode {
 }
 
 #[cfg(windows)]
-fn run(command: Command) -> Result<i32, String> {
-    win::run(command)
+fn run(command: Command, machine: Option<String>) -> Result<i32, String> {
+    win::run(command, machine.as_deref())
 }
 
 // Linux and macOS hosts are #1; until then the core builds and is tested
 // there, and vma says plainly that it cannot reach VirtualBox.
 #[cfg(not(windows))]
-fn run(_: Command) -> Result<i32, String> {
+fn run(_: Command, _: Option<String>) -> Result<i32, String> {
     Err("VirtualBox is reached from a Windows host only, for now".into())
 }

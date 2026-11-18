@@ -82,10 +82,10 @@ one: VirtualBox's PS/2 keyboard drops what its queue can't hold, so vma reads
 that queue and sends the next keys once it has room. A machine paused while
 keys go fails the command, and gets the keys already sent when it goes on.
 vma types only on a PS/2 keyboard, VirtualBox's default.
-`VMA_NAME` picks the machine the other commands act on; by
-default it is the one running, or the only one there is. `destroy` takes a
-name every time. A picture goes to `VMA_OUT`, or to `%TEMP%\vma`, unless a
-`FILE` is given. vma's own failures exit with 125.
+`--machine NAME`, or else `VMA_NAME`, picks the machine the other commands
+act on; by default it is the one running, or the only one there is.
+`destroy` takes a name every time. A picture goes to `VMA_OUT`, or to
+`%TEMP%\vma`, unless a `FILE` is given. vma's own failures exit with 125.
 
 ## Inside
 
@@ -108,7 +108,7 @@ could be added only to a machine that is off and serves one vma at a time.
 standard input and output, with one connection to VirtualBox for the whole
 run and pictures in the results. A tool's arguments are the command's,
 by name (`x`, `y`, `button`, `look`, …), and `machine` stands for
-`VMA_NAME`. It speaks MCP 2026-07-28, and 2024-11-05 to 2025-11-25 for a
+`--machine`. It speaks MCP 2026-07-28, and 2024-11-05 to 2025-11-25 for a
 client that opens with `initialize`. It answers the client while a call
 runs, and a call the client cancels stops. `start` and `stop` may take
 minutes, longer than some clients wait for a call: give such a client the

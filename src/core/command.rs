@@ -43,10 +43,11 @@ The machines
                             it --timeout
   destroy NAME              remove it: its disks, settings and folder; an ISO
                             it held from elsewhere is kept. Always by name
+
+The machine --machine NAME or VMA_NAME names, or the one running, or the only
+one there is
   status                    its state, screen, Guest Additions, system,
                             settings and media
-
-The machine VMA_NAME names, or the one running, or the only one there is
   set SETTINGS              change its settings; some only while it is off
   start [--headless] [--timeout S]
                             turn it on and wait, 240 s by default, for its
@@ -126,7 +127,7 @@ delete, home, end, pageup, pagedown, up, down, left or right.
 For an agent
   mcp                       an MCP server on standard input and output: a
                             tool for each command but batch, which takes its
-                            arguments by name, and machine for VMA_NAME; a
+                            arguments by name, and machine for --machine; a
                             picture comes in the result
 
   notices                   vma's licence and the third-party notices
@@ -329,11 +330,30 @@ const SETTINGS: [&str; 6] = [
     "drag-and-drop",
 ];
 
-/// Reads the words after `vma`: `None` asks for help. A failure is the
-/// line vma prints.
-pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
+/// Reads the words after `vma`: `None` asks for help. A command that acts
+/// on a machine takes `--machine NAME`, which comes back beside it. A
+/// failure is the line vma prints.
+pub fn parse(words: &[String]) -> Result<Option<(Command, Option<String>)>, String> {
     let Some((name, rest)) = words.split_first() else {
         return Ok(None);
+    };
+    let mut machine = None;
+    // How a command that acts on a machine reads its words: as any other,
+    // and --machine too.
+    let mut on = |rest: &[String],
+                  switches: &[&str],
+                  valued: &[&str],
+                  min: usize,
+                  max: usize,
+                  shape: &str|
+     -> Result<Options, String> {
+        let valued = [valued, &["machine"]].concat();
+        let o = Options::read(rest, switches, &valued, min, max, shape)?;
+        machine = match o.value("machine") {
+            Some("") => return Err("--machine wants a machine's name".into()),
+            named => named.map(String::from),
+        };
+        Ok(o)
     };
     let command = match name.as_str() {
         "help" | "--help" | "-h" => return Ok(None),
@@ -362,11 +382,11 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             Command::Destroy(o.pos[0].clone())
         }
         "status" => {
-            Options::read(rest, &[], &[], 0, 0, "status")?;
+            on(rest, &[], &[], 0, 0, "status")?;
             Command::Status
         }
         "set" => {
-            let o = Options::read(rest, &[], &SETTINGS, 0, 0, "set SETTINGS")?;
+            let o = on(rest, &[], &SETTINGS, 0, 0, "set SETTINGS")?;
             let settings = o.settings()?;
             if settings.is_empty() {
                 return Err("usage: vma set SETTINGS, as vma help lists them".into());
@@ -374,7 +394,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             Command::Set(settings)
         }
         "start" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["headless"],
                 &["timeout"],
@@ -388,29 +408,29 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             }
         }
         "stop" => {
-            let o = Options::read(rest, &["force"], &[], 0, 0, "stop [--force]")?;
+            let o = on(rest, &["force"], &[], 0, 0, "stop [--force]")?;
             Command::Stop {
                 force: o.has("force"),
             }
         }
         "insert" => {
-            let o = Options::read(rest, &[], &[], 1, 1, "insert FILE")?;
+            let o = on(rest, &[], &[], 1, 1, "insert FILE")?;
             Command::Insert(o.pos[0].clone())
         }
         "eject" => {
-            Options::read(rest, &[], &[], 0, 0, "eject")?;
+            on(rest, &[], &[], 0, 0, "eject")?;
             Command::Eject
         }
         "disk" => {
-            let o = Options::read(rest, &[], &[], 1, 1, "disk GB")?;
+            let o = on(rest, &[], &[], 1, 1, "disk GB")?;
             Command::Disk(number("GB", &o.pos[0], 1, u32::MAX)?)
         }
         "shot" => {
-            let o = Options::read(rest, &[], &[], 0, 1, "shot [FILE]")?;
+            let o = on(rest, &[], &[], 0, 1, "shot [FILE]")?;
             Command::Shot(o.pos.first().cloned())
         }
         "click" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["right", "middle", "double", "look"],
                 &["hold"],
@@ -418,24 +438,25 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
                 2,
                 "click X Y|NAME [--right|--middle] [--double] [--hold KEYS] [--look]",
             )?;
+            let button = o.button(&["right", "middle"])?.unwrap_or(Button::Left);
             if o.pos.len() == 1 {
-                return Ok(Some(Command::ClickName {
+                Command::ClickName {
                     name: o.pos[0].clone(),
-                    button: o.button(&["right", "middle"])?.unwrap_or(Button::Left),
+                    button,
                     double: o.has("double"),
                     hold: o.held()?,
                     look: o.has("look"),
-                }));
+                }
+            } else {
+                let (x, y) = o.place(0)?;
+                o.input(
+                    &[(x, y)],
+                    input::click(x, y, button, o.has("double"), &o.held()?),
+                )
             }
-            let (x, y) = o.place(0)?;
-            let button = o.button(&["right", "middle"])?.unwrap_or(Button::Left);
-            o.input(
-                &[(x, y)],
-                input::click(x, y, button, o.has("double"), &o.held()?),
-            )
         }
         "move" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["left", "right", "middle", "look"],
                 &[],
@@ -450,7 +471,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             )
         }
         "press" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["right", "middle", "look"],
                 &[],
@@ -463,12 +484,12 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             o.input(&[(x, y)], input::press(x, y, button))
         }
         "release" => {
-            let o = Options::read(rest, &["look"], &[], 2, 2, "release X Y [--look]")?;
+            let o = on(rest, &["look"], &[], 2, 2, "release X Y [--look]")?;
             let (x, y) = o.place(0)?;
             o.input(&[(x, y)], input::release(x, y))
         }
         "drag" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["right", "middle", "look"],
                 &["hold"],
@@ -481,7 +502,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             o.input(&[from, to], input::drag(from, to, button, &o.held()?))
         }
         "scroll" => {
-            let o = Options::read(rest, &["look"], &[], 3, 3, "scroll X Y N [--look]")?;
+            let o = on(rest, &["look"], &[], 3, 3, "scroll X Y N [--look]")?;
             let (x, y) = o.place(0)?;
             let notches = match o.pos[2].parse::<i32>() {
                 Ok(n) if n != 0 => n,
@@ -495,7 +516,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             o.input(&[(x, y)], input::scroll(x, y, notches))
         }
         "keys" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["look"],
                 &[],
@@ -506,11 +527,11 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             o.input(&[], vec![Act::Keys(input::combos(&o.pos)?)])
         }
         "type" => {
-            let o = Options::read(rest, &["look"], &[], 1, usize::MAX, "type TEXT [--look]")?;
+            let o = on(rest, &["look"], &[], 1, usize::MAX, "type TEXT [--look]")?;
             o.input(&[], vec![Act::Keys(input::typed(&o.pos.join(" "))?)])
         }
         "batch" => {
-            Options::read(rest, &[], &[], 0, 0, "batch")?;
+            on(rest, &[], &[], 0, 0, "batch")?;
             Command::Batch
         }
         "mcp" => {
@@ -518,7 +539,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             Command::Mcp
         }
         "setup" => {
-            Options::read(rest, &[], &[], 0, 0, "setup")?;
+            on(rest, &[], &[], 0, 0, "setup")?;
             Command::Setup
         }
         "notices" => {
@@ -526,7 +547,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             Command::Notices
         }
         "run" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["admin"],
                 &["file", "timeout"],
@@ -545,14 +566,14 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             }
         }
         "read" => {
-            let o = Options::read(rest, &["admin"], &[], 1, 1, "read PATH [--admin]")?;
+            let o = on(rest, &["admin"], &[], 1, 1, "read PATH [--admin]")?;
             Command::Read {
                 path: o.pos[0].clone(),
                 admin: o.has("admin"),
             }
         }
         "write" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["admin"],
                 &[],
@@ -567,7 +588,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             }
         }
         "push" => {
-            let o = Options::read(rest, &["admin"], &[], 1, 2, "push LOCAL [PATH] [--admin]")?;
+            let o = on(rest, &["admin"], &[], 1, 2, "push LOCAL [PATH] [--admin]")?;
             Command::Push {
                 local: o.pos[0].clone(),
                 path: o.pos.get(1).cloned(),
@@ -575,7 +596,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             }
         }
         "pull" => {
-            let o = Options::read(rest, &["admin"], &[], 1, 2, "pull PATH [LOCAL] [--admin]")?;
+            let o = on(rest, &["admin"], &[], 1, 2, "pull PATH [LOCAL] [--admin]")?;
             Command::Pull {
                 path: o.pos[0].clone(),
                 local: o.pos.get(1).cloned(),
@@ -583,18 +604,18 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
             }
         }
         "paste" => {
-            let o = Options::read(rest, &["look"], &[], 0, usize::MAX, "paste [TEXT] [--look]")?;
+            let o = on(rest, &["look"], &[], 0, usize::MAX, "paste [TEXT] [--look]")?;
             Command::Paste {
                 text: (!o.pos.is_empty()).then(|| o.pos.join(" ")),
                 look: o.has("look"),
             }
         }
         "windows" => {
-            Options::read(rest, &[], &[], 0, 0, "windows")?;
+            on(rest, &[], &[], 0, 0, "windows")?;
             Command::Windows
         }
         "wait" => {
-            let o = Options::read(
+            let o = on(
                 rest,
                 &["gone"],
                 &["timeout"],
@@ -626,7 +647,7 @@ pub fn parse(words: &[String]) -> Result<Option<Command>, String> {
         }
         _ => return Err(format!("{name} is no command: vma help")),
     };
-    Ok(Some(command))
+    Ok(Some((command, machine)))
 }
 
 /// The commands a batch takes as steps, besides `pause`.
@@ -635,9 +656,10 @@ const STEPS: [&str; 12] = [
     "windows", "wait",
 ];
 
-/// A line of a batch, read into the command it asks for: `None` for a
-/// blank line or a comment. A step is one of `STEPS`, or `pause MS`.
-pub fn step(line: &str) -> Result<Option<Command>, String> {
+/// A line of a batch, read into the command it asks for and the machine
+/// its `--machine` names: `None` for a blank line or a comment. A step is
+/// one of `STEPS`, or `pause MS`.
+pub fn step(line: &str) -> Result<Option<(Command, Option<String>)>, String> {
     let line = line.trim();
     if line.is_empty() || line.starts_with('#') {
         return Ok(None);
@@ -646,11 +668,12 @@ pub fn step(line: &str) -> Result<Option<Command>, String> {
     if words[0] == "pause" {
         let o = Options::read(&words[1..], &[], &[], 1, 1, "pause MS")?;
         let ms = number("MS", &o.pos[0], 0, u32::MAX)?;
-        return Ok(Some(Command::Input {
+        let pause = Command::Input {
             acts: vec![Act::Pause(ms)],
             places: Vec::new(),
             look: false,
-        }));
+        };
+        return Ok(Some((pause, None)));
     }
     if !STEPS.contains(&words[0].as_str()) {
         return Err(format!(
@@ -921,7 +944,12 @@ mod tests {
     }
 
     fn parsed(line: &str) -> Command {
-        parse(&words(line)).unwrap().unwrap()
+        parse(&words(line)).unwrap().unwrap().0
+    }
+
+    /// The machine `--machine` names in `line`.
+    fn machine(line: &str) -> Option<String> {
+        parse(&words(line)).unwrap().unwrap().1
     }
 
     fn failure(line: &str) -> String {
@@ -954,6 +982,61 @@ mod tests {
             Command::Shot(Some("pics/a.png".into()))
         );
         assert_eq!(failure("shot a.png b.png"), "usage: vma shot [FILE]");
+    }
+
+    #[test]
+    fn a_command_of_a_machine_takes_its_name() {
+        assert_eq!(machine("status"), None);
+        assert_eq!(machine("status --machine t1"), Some("t1".into()));
+        assert_eq!(parsed("status --machine t1"), Command::Status);
+        assert_eq!(machine("stop --machine t1 --force"), Some("t1".into()));
+        assert_eq!(machine("batch --machine t1"), Some("t1".into()));
+        // Wherever options go, and never past a lone -- that ends them.
+        assert_eq!(machine("type hello --machine t1"), Some("t1".into()));
+        assert_eq!(parsed("type hello --machine t1"), parsed("type hello"),);
+        assert_eq!(machine("type -- --machine t1"), None);
+        assert_eq!(
+            parsed("type -- --machine t1"),
+            Command::Input {
+                acts: vec![Act::Keys(input::typed("--machine t1").unwrap())],
+                places: vec![],
+                look: false
+            }
+        );
+        let Command::Run { script, .. } = parsed("run --timeout 5 -- --machine t1") else {
+            panic!("not run");
+        };
+        assert_eq!(script.as_deref(), Some("--machine t1"));
+        assert_eq!(machine("run --timeout 5 -- --machine t1"), None);
+        assert_eq!(
+            failure("status --machine"),
+            "--machine wants a value: vma status"
+        );
+        assert_eq!(
+            failure("status --machine a --machine b"),
+            "--machine is given twice"
+        );
+        assert_eq!(
+            parse(&["status".into(), "--machine".into(), "".into()]),
+            Err("--machine wants a machine's name".into())
+        );
+    }
+
+    #[test]
+    fn a_command_of_no_one_machine_takes_none() {
+        for line in [
+            "list --machine t1",
+            "create t2 --machine t1",
+            "destroy t2 --machine t1",
+            "mcp --machine t1",
+            "notices --machine t1",
+            "install --machine t1",
+        ] {
+            assert!(
+                failure(line).starts_with("--machine is not an option here"),
+                "{line}"
+            );
+        }
     }
 
     #[test]
@@ -1427,21 +1510,41 @@ mod tests {
         assert_eq!(step("   # a note"), Ok(None));
         assert_eq!(
             step("pause 500"),
-            Ok(Some(Command::Input {
-                acts: vec![Act::Pause(500)],
-                places: vec![],
-                look: false
-            }))
+            Ok(Some((
+                Command::Input {
+                    acts: vec![Act::Pause(500)],
+                    places: vec![],
+                    look: false
+                },
+                None
+            )))
         );
         assert_eq!(
             step("  type \"a  b\" 'say \"hi\"'"),
-            Ok(Some(Command::Input {
-                acts: vec![Act::Keys(input::typed("a  b say \"hi\"").unwrap())],
-                places: vec![],
-                look: false
-            }))
+            Ok(Some((
+                Command::Input {
+                    acts: vec![Act::Keys(input::typed("a  b say \"hi\"").unwrap())],
+                    places: vec![],
+                    look: false
+                },
+                None
+            )))
         );
-        assert_eq!(step("shot ''"), Ok(Some(Command::Shot(Some("".into())))));
+        assert_eq!(
+            step("shot ''"),
+            Ok(Some((Command::Shot(Some("".into())), None)))
+        );
+        assert_eq!(
+            step("click 1 2 --machine t1"),
+            Ok(Some((
+                Command::Input {
+                    acts: input::click(1, 2, Button::Left, false, &[]),
+                    places: vec![(1, 2)],
+                    look: false
+                },
+                Some("t1".into())
+            )))
+        );
         assert_eq!(
             step("status"),
             Err("status is no step: a batch takes shot, click, move, press, release, drag, scroll, keys, type, paste, windows, wait and pause".into())

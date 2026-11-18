@@ -27,9 +27,10 @@ use std::time::{Duration, Instant};
 use vbox::{Console, Machine, VirtualBox};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 
-/// Runs `command`, and gives the exit code it ends with: 0, or the code
-/// of a script it ran inside.
-pub fn run(command: Command) -> Result<i32, String> {
+/// Runs `command` on the machine `named`, or the one the command line
+/// would mean, and gives the exit code it ends with: 0, or the code of a
+/// script it ran inside.
+pub fn run(command: Command, named: Option<&str>) -> Result<i32, String> {
     match command {
         Command::Boot(role) => return agent::boot(role).map(|()| 0),
         Command::Agent(role) => return agent::serve(role).map(|()| 0),
@@ -38,10 +39,10 @@ pub fn run(command: Command) -> Result<i32, String> {
     }
     let mut session = Session::new()?;
     match command {
-        Command::Batch => session.batch().map(|()| 0),
+        Command::Batch => session.batch(named).map(|()| 0),
         Command::Mcp => session.mcp().map(|()| 0),
         command => {
-            session.run(command, None, &mut Sink::Print)?;
+            session.run(command, named, &mut Sink::Print)?;
             Ok(session.code)
         }
     }
@@ -136,7 +137,7 @@ impl Session {
         let ask = if self.mcp {
             "give machine"
         } else {
-            "set VMA_NAME to one"
+            "name one with --machine NAME or VMA_NAME"
         };
         self.vbox()?.machine(named.as_deref(), ask)
     }
@@ -683,8 +684,9 @@ impl Session {
     }
 
     /// Runs the steps standard input holds, a line each, through one
-    /// console, and stops at the first that fails, naming its line.
-    fn batch(&mut self) -> Result<(), String> {
+    /// console, on the machine `named` unless a step names its own, and
+    /// stops at the first that fails, naming its line.
+    fn batch(&mut self, named: Option<&str>) -> Result<(), String> {
         self.stdin_taken = true;
         let mut text = String::new();
         std::io::stdin()
@@ -692,10 +694,11 @@ impl Session {
             .map_err(|e| format!("standard input can't be read: {e}"))?;
         for (i, line) in text.lines().enumerate() {
             let failed = |why: String| format!("line {}, {}: {why}", i + 1, line.trim());
-            let Some(step) = command::step(line).map_err(failed)? else {
+            let Some((step, machine)) = command::step(line).map_err(failed)? else {
                 continue;
             };
-            self.run(step, None, &mut Sink::Print).map_err(failed)?;
+            let named = machine.as_deref().or(named);
+            self.run(step, named, &mut Sink::Print).map_err(failed)?;
         }
         Ok(())
     }
@@ -729,7 +732,9 @@ impl Session {
             }
             let done = command::parse(&call.words)
                 .and_then(|c| c.ok_or_else(|| "a tool is a command".to_string()))
-                .and_then(|command| {
+                // A tool's words never hold --machine: its machine is an
+                // argument of its own.
+                .and_then(|(command, _)| {
                     let mut out = Sink::Keep(Output::default());
                     self.run(command, call.machine.as_deref(), &mut out)?;
                     let Sink::Keep(output) = out else {
