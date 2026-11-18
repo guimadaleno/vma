@@ -13,7 +13,7 @@ use crate::core::agent::{Role, Window, plain_name, text_of};
 use crate::core::command::{self, Command, Sharing};
 use crate::core::input::{self, Act};
 use crate::core::json::Json;
-use crate::core::machine;
+use crate::core::machine::{self, Use};
 use crate::core::mcp::{self, Output, Reply};
 use crate::core::paths::Caller;
 use link::Link;
@@ -131,15 +131,15 @@ impl Session {
     }
 
     /// The machine `named` names, or else VMA_NAME, or else the one
-    /// running, or the only one there is.
-    fn machine(&mut self, named: Option<&str>) -> Result<Machine, String> {
+    /// `machine::choose` guesses for a command that does `how` to it.
+    fn machine(&mut self, named: Option<&str>, how: Use) -> Result<Machine, String> {
         let named = named.map(String::from).or_else(|| setting("VMA_NAME"));
         let ask = if self.mcp {
             "give machine"
         } else {
             "name one with --machine NAME or VMA_NAME"
         };
-        self.vbox()?.machine(named.as_deref(), ask)
+        self.vbox()?.machine(named.as_deref(), how, ask)
     }
 
     /// The console of `machine`: the one kept, where it is that machine's
@@ -160,6 +160,7 @@ impl Session {
     /// Runs `command` on the machine `named`, or the one the command line
     /// would mean, saying what it gives to `out`.
     fn run(&mut self, command: Command, named: Option<&str>, out: &mut Sink) -> Result<(), String> {
+        let how = command.machine_use();
         // A command that changes a machine takes locks of its own.
         if !matches!(
             command,
@@ -201,12 +202,12 @@ impl Session {
                 Ok(())
             }
             Command::Status => {
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 self.status(&machine, out)
             }
-            Command::Set(settings) => self.machine(named)?.set(&settings),
+            Command::Set(settings) => self.machine(named, how)?.set(&settings),
             Command::Start { headless, timeout } => {
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 let installing = machine.installing()?;
                 machine.start(self.vbox()?, headless, timeout, &mut |line| out.say(line))?;
                 // A machine its install brought to its desktop gets the
@@ -229,30 +230,30 @@ impl Session {
                 Ok(())
             }
             Command::Stop { force } => {
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 machine.stop(self.vbox()?, force)
             }
             Command::Insert(file) => {
                 let iso = iso_path(&self.caller, &file)?;
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 machine.insert(self.vbox()?, &iso)
             }
             Command::Eject => {
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 machine.eject(self.vbox()?)
             }
             Command::Disk(gb) => {
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 machine.add_disk(self.vbox()?, gb)
             }
             Command::Shot(file) => {
                 let target = file.map(|f| self.caller.windows(&f)).transpose()?;
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 let png = self.console(&machine)?.shot()?;
                 self.picture(png, target, out)
             }
             Command::Input { acts, places, look } => {
-                let machine = self.machine(named)?;
+                let machine = self.machine(named, how)?;
                 let console = self.console(&machine)?;
                 let (width, height) = console.screen()?;
                 input::on_screen(&places, width, height)?;
@@ -556,7 +557,7 @@ impl Session {
 
     /// The link to the agent inside the machine `named`.
     fn link(&mut self, named: Option<&str>) -> Result<Link, String> {
-        let machine = self.machine(named)?;
+        let machine = self.machine(named, Use::Change)?;
         Link::open(self.console(&machine)?)
     }
 
@@ -605,7 +606,7 @@ impl Session {
             }
             return Ok(());
         }
-        let machine = self.machine(named)?;
+        let machine = self.machine(named, Use::Change)?;
         let console = self.console(&machine)?;
         let keys = |combo: &str| -> Result<(), String> {
             console.act(&[Act::Keys(input::combos(&[combo.to_string()])?)])

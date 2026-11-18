@@ -9,7 +9,8 @@
 use super::dispatch::{Arg, Object};
 use crate::core::command::{Create, Install, Settings, Sharing};
 use crate::core::input::{self, Act};
-use crate::core::{install, machine, version};
+use crate::core::machine::{self, Use};
+use crate::core::{install, version};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -148,9 +149,10 @@ impl VirtualBox {
         })
     }
 
-    /// The machine `named`, or the one `machine::choose` means, which `ask`
-    /// says how to name where it can't choose.
-    pub fn machine(&self, named: Option<&str>, ask: &str) -> Result<Machine, String> {
+    /// The machine `named`, or the one `machine::choose` means for a
+    /// command that does `how` to it, which `ask` says how to name where it
+    /// can't choose.
+    pub fn machine(&self, named: Option<&str>, how: Use, ask: &str) -> Result<Machine, String> {
         if let Some(name) = named {
             return self.find(name);
         }
@@ -165,7 +167,7 @@ impl VirtualBox {
             listed.push((object.get("Name")?.string()?, object.get("State")?.u32()?));
             found.push(object);
         }
-        let index = machine::choose(&listed, ask)?;
+        let index = machine::choose(&listed, how, ask)?;
         Ok(Machine {
             name: listed.swap_remove(index).0,
             object: found.swap_remove(index),

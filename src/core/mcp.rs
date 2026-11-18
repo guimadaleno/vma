@@ -8,6 +8,7 @@
 //! shell's; this decides what a line asks and what goes back.
 
 use crate::core::json::{self, Json};
+use crate::core::machine::Use;
 
 /// The stateless revision, the only one a request's `_meta` may name.
 pub const MODERN: &str = "2026-07-28";
@@ -29,8 +30,9 @@ const SERVER_KEY: &str = "io.modelcontextprotocol/serverInfo";
 const CACHE_MS: u32 = 86_400_000;
 
 const INSTRUCTIONS: &str = "vma uses a VirtualBox machine as a person at it would: its screen, \
-mouse and keyboard. A tool acts on the machine its `machine` names, or else the one running, \
-or the only one there is. x and y are pixels of the screen as a shot shows it, from 0. With \
+mouse and keyboard. A tool acts on the machine its `machine` names, or else the one VMA_NAME \
+names where the server has it. Without either, status and shot, which only read, take the one \
+running, or the only one there is; any other tool takes only the only one there is. x and y are pixels of the screen as a shot shows it, from 0. With \
 `look`, a picture of the screen half a second after comes in the result. Keys go as fast as \
 the machine reads them.";
 
@@ -353,8 +355,8 @@ struct Tool {
     name: &'static str,
     about: &'static str,
     params: &'static [Param],
-    /// Whether it acts on the machine `machine` names.
-    machine: bool,
+    /// What it does to the machine `machine` names, where it acts on one.
+    machine: Option<Use>,
 }
 
 const fn p(name: &'static str, kind: Kind, required: bool, about: &'static str) -> Param {
@@ -436,7 +438,7 @@ const TOOLS: [Tool; 28] = [
         name: "list",
         about: "Every machine: its state and name.",
         params: &[],
-        machine: false,
+        machine: None,
     },
     Tool {
         name: "create",
@@ -477,25 +479,25 @@ const TOOLS: [Tool; 28] = [
             SETTINGS[4],
             SETTINGS[5],
         ],
-        machine: false,
+        machine: None,
     },
     Tool {
         name: "destroy",
         about: "Remove a machine: its disks, settings and folder; an ISO it held from elsewhere is kept. Always by name.",
         params: &[p("name", Kind::Word, true, "the machine's name")],
-        machine: false,
+        machine: None,
     },
     Tool {
         name: "status",
         about: "The machine's state, screen, Guest Additions, system, settings and media.",
         params: &[],
-        machine: true,
+        machine: Some(Use::Read),
     },
     Tool {
         name: "set",
         about: "Change the machine's settings; some only while it is off.",
         params: &SETTINGS,
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "start",
@@ -514,37 +516,37 @@ const TOOLS: [Tool; 28] = [
                 "seconds to wait for the desktop",
             ),
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "stop",
         about: "Ask the machine to shut down; the power goes after 90 s, or at once with force or while it is paused.",
         params: &[p("force", Kind::Switch, false, "cut the power at once")],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "insert",
         about: "An ISO in the machine's optical drive.",
         params: &[p("file", Kind::Word, true, "the ISO")],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "eject",
         about: "The machine's optical drive emptied; an install's own medium is deleted, once the machine stops if it runs.",
         params: &[],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "disk",
         about: "A new disk, attached to the machine.",
         params: &[p("gb", Kind::Whole, true, "its size in GB")],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "shot",
         about: "A picture of the machine's screen, at its size, in the result.",
         params: &[p("file", Kind::Word, false, "a PNG to write it to as well")],
-        machine: true,
+        machine: Some(Use::Read),
     },
     Tool {
         name: "click",
@@ -563,7 +565,7 @@ const TOOLS: [Tool; 28] = [
             HOLD,
             LOOK,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "move",
@@ -584,7 +586,7 @@ const TOOLS: [Tool; 28] = [
             ),
             LOOK,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "drag",
@@ -598,7 +600,7 @@ const TOOLS: [Tool; 28] = [
             HOLD,
             LOOK,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "press",
@@ -609,7 +611,7 @@ const TOOLS: [Tool; 28] = [
             p("button", PRESSED, false, "left by default"),
             LOOK,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "release",
@@ -619,7 +621,7 @@ const TOOLS: [Tool; 28] = [
             p("y", Kind::Place, true, "pixels from the top, from 0"),
             LOOK,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "scroll",
@@ -635,31 +637,31 @@ const TOOLS: [Tool; 28] = [
             ),
             LOOK,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "keys",
         about: "Combos pressed one after another, as win+r, ctrl+shift+enter, tab, f5, alt+y. A key is a letter, digit or mark of a US keyboard, unshifted, or esc, tab, enter, space, backspace, capslock, ctrl, shift, alt, altgr, win, menu, f1 to f12, insert, delete, home, end, pageup, pagedown, up, down, left or right.",
         params: &[p("combos", Kind::Words, true, "the combos, in order"), LOOK],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "type",
         about: "Text typed as keys of a US keyboard: ASCII only, a new line as enter.",
         params: &[p("text", Kind::Word, true, "the text"), LOOK],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "paste",
         about: "Any text, by the clipboard and ctrl+v.",
         params: &[p("text", Kind::Word, true, "the text"), LOOK],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "windows",
         about: "The open windows inside: place, size, program, title; > marks the one in front.",
         params: &[],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "wait",
@@ -674,13 +676,13 @@ const TOOLS: [Tool; 28] = [
             ),
             p("timeout", Kind::Number, false, "seconds, 30 by default"),
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "setup",
         about: "Once: vma's agent inside the machine, started at each logon, once as the person and once elevated; run, read, write, push, pull, paste, windows, wait and click by name need it.",
         params: &[],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "run",
@@ -701,13 +703,13 @@ const TOOLS: [Tool; 28] = [
             ),
             ADMIN,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "read",
         about: "A file's text, inside.",
         params: &[p("path", Kind::Word, true, INSIDE), ADMIN],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "write",
@@ -717,7 +719,7 @@ const TOOLS: [Tool; 28] = [
             p("text", Kind::Word, true, "the text"),
             ADMIN,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "push",
@@ -732,7 +734,7 @@ const TOOLS: [Tool; 28] = [
             ),
             ADMIN,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
     Tool {
         name: "pull",
@@ -747,7 +749,7 @@ const TOOLS: [Tool; 28] = [
             ),
             ADMIN,
         ],
-        machine: true,
+        machine: Some(Use::Change),
     },
 ];
 
@@ -758,15 +760,20 @@ impl Tool {
             .iter()
             .map(|param| (param.name, param.schema()))
             .collect();
-        if self.machine {
+        if let Some(how) = self.machine {
+            let about = match how {
+                Use::Read => {
+                    "the machine; by default the one VMA_NAME names, or else the one running, or the only one there is"
+                }
+                Use::Change => {
+                    "the machine; by default the one VMA_NAME names, or else the only one there is"
+                }
+            };
             properties.push((
                 "machine",
                 Json::object(vec![
                     ("type", Json::text("string")),
-                    (
-                        "description",
-                        Json::text("the machine; by default the one running, or the only one"),
-                    ),
+                    ("description", Json::text(about)),
                 ]),
             ));
         }
@@ -799,7 +806,7 @@ impl Tool {
         };
         let mut machine = None;
         for (key, value) in given {
-            if self.machine && key == "machine" {
+            if self.machine.is_some() && key == "machine" {
                 let name = value
                     .as_str()
                     .ok_or_else(|| "machine is a machine's name".to_string())?;
@@ -1194,11 +1201,36 @@ mod tests {
     }
 
     #[test]
+    fn a_tool_says_the_default_its_command_takes() {
+        for tool in &TOOLS {
+            let Some(how) = tool.machine else { continue };
+            let mut given: Vec<String> = tool
+                .params
+                .iter()
+                .filter(|p| p.required)
+                .map(|p| match p.kind {
+                    Kind::Place | Kind::Whole => format!(r#""{}":1"#, p.name),
+                    Kind::Words => format!(r#""{}":["a"]"#, p.name),
+                    _ => format!(r#""{}":"a""#, p.name),
+                })
+                .collect();
+            match tool.name {
+                "click" => given.push(r#""name":"OK""#.into()),
+                "set" => given.push(r#""memory":512"#.into()),
+                _ => {}
+            }
+            let call = run(&format!("{{{}}}", given.join(",")), tool.name);
+            let (command, _) = command::parse(&call.words).unwrap().unwrap();
+            assert_eq!(command.machine_use(), how, "{}", tool.name);
+        }
+    }
+
+    #[test]
     fn a_tool_takes_a_machine_where_its_command_does() {
         for tool in &TOOLS {
             let words = [tool.name, "--machine", "m", "--help-me"].map(String::from);
             let refused = command::parse(&words).unwrap_err();
-            let wanted = if tool.machine {
+            let wanted = if tool.machine.is_some() {
                 "--help-me is not an option here"
             } else {
                 "--machine is not an option here"

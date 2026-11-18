@@ -83,7 +83,9 @@ that queue and sends the next keys once it has room. A machine paused while
 keys go fails the command, and gets the keys already sent when it goes on.
 vma types only on a PS/2 keyboard, VirtualBox's default.
 `--machine NAME`, or else `VMA_NAME`, picks the machine the other commands
-act on; by default it is the one running, or the only one there is.
+act on. Named by neither, `status`, `shot` and a batch's `pause`, which only
+read, take the one running, or the only one there is; any other command
+takes only the only one there is, as one of several may be someone else's.
 `destroy` takes a name every time. A picture goes to `VMA_OUT`, or to
 `%TEMP%\vma`, unless a `FILE` is given. vma's own failures exit with 125.
 

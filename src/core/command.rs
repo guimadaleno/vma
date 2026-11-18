@@ -6,6 +6,7 @@
 use crate::core::agent::Role;
 use crate::core::input::{self, Act, Button};
 use crate::core::install;
+use crate::core::machine::Use;
 
 /// What `vma notices` prints: they travel inside the executable, as
 /// nothing ships beside it.
@@ -44,8 +45,7 @@ The machines
   destroy NAME              remove it: its disks, settings and folder; an ISO
                             it held from elsewhere is kept. Always by name
 
-The machine --machine NAME or VMA_NAME names, or the one running, or the only
-one there is
+The machine --machine NAME names, VMA_NAME by default
   status                    its state, screen, Guest Additions, system,
                             settings and media
   set SETTINGS              change its settings; some only while it is off
@@ -131,6 +131,11 @@ For an agent
                             picture comes in the result
 
   notices                   vma's licence and the third-party notices
+
+Named by neither --machine nor VMA_NAME, status, shot and a batch's pause,
+which only read, take the one running, or the only one there is; any other
+command takes only the only one there is, as one of several may be someone
+else's.
 
 A lone -- before a command's first word ends its options, so a word after it
 may start with --, as in vma type -- --text. A picture or a file pulled goes
@@ -238,6 +243,20 @@ pub enum Command {
     /// Inside the machine, elevated, run by `setup`: makes the tasks that
     /// start `boot` at each logon.
     Install,
+}
+
+impl Command {
+    /// What it does to the machine it acts on: status, a shot and a batch's
+    /// pause, which sends nothing, only read it; anything else changes it.
+    pub fn machine_use(&self) -> Use {
+        match self {
+            Command::Status | Command::Shot(_) => Use::Read,
+            Command::Input { acts, .. } if acts.iter().all(|a| matches!(a, Act::Pause(_))) => {
+                Use::Read
+            }
+            _ => Use::Change,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -1020,6 +1039,31 @@ mod tests {
             parse(&["status".into(), "--machine".into(), "".into()]),
             Err("--machine wants a machine's name".into())
         );
+    }
+
+    #[test]
+    fn only_status_a_shot_and_a_pause_read_their_machine() {
+        assert_eq!(parsed("status").machine_use(), Use::Read);
+        assert_eq!(parsed("shot a.png").machine_use(), Use::Read);
+        let (pause, _) = step("pause 500").unwrap().unwrap();
+        assert_eq!(pause.machine_use(), Use::Read);
+        for line in [
+            "set --memory 512",
+            "start",
+            "stop",
+            "eject",
+            "click 1 2",
+            "click OK",
+            "keys enter",
+            "type a",
+            "paste a",
+            "setup",
+            "read a.txt",
+            "windows",
+            "wait Notepad",
+        ] {
+            assert_eq!(parsed(line).machine_use(), Use::Change, "{line}");
+        }
     }
 
     #[test]

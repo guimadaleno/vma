@@ -45,11 +45,23 @@ pub fn state_word(state: u32) -> &'static str {
     }
 }
 
-/// The machine a call means when it names none: the only one online, or
-/// else the only one there is. `machines` holds each one's name and state;
-/// the answer is an index into it. `ask` says how a call names one, as
-/// "name one with --machine NAME or VMA_NAME".
-pub fn choose(machines: &[(String, u32)], ask: &str) -> Result<usize, String> {
+/// What a command does to the machine it means, which decides whether vma
+/// may guess which one that is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Use {
+    /// It only reads the machine, as status and a shot do: the one running
+    /// is guessed.
+    Read,
+    /// It changes the machine: guessed only where it is the only one, as
+    /// another there may be someone else's.
+    Change,
+}
+
+/// The machine a call means when it names none: the only one there is,
+/// or, for a call that only reads, the only one online. `machines` holds
+/// each one's name and state; the answer is an index into it. `ask` says
+/// how a call names one, as "name one with --machine NAME or VMA_NAME".
+pub fn choose(machines: &[(String, u32)], how: Use, ask: &str) -> Result<usize, String> {
     let online: Vec<usize> = (0..machines.len())
         .filter(|&i| is_online(machines[i].1))
         .collect();
@@ -60,9 +72,13 @@ pub fn choose(machines: &[(String, u32)], ask: &str) -> Result<usize, String> {
             .join(", ")
     };
     match (online.len(), machines.len()) {
+        (_, 0) => Err("VirtualBox has no machine".into()),
+        (_, 1) => Ok(0),
+        _ if how == Use::Change => Err(format!(
+            "this changes a machine, and there are several ({}): {ask}",
+            names(&mut (0..machines.len()))
+        )),
         (1, _) => Ok(online[0]),
-        (0, 1) => Ok(0),
-        (0, 0) => Err("VirtualBox has no machine".into()),
         (0, _) => Err(format!(
             "no machine is running, and there are several ({}): {ask}",
             names(&mut (0..machines.len()))
@@ -142,25 +158,53 @@ mod tests {
     }
 
     #[test]
-    fn the_one_running_is_meant() {
+    fn the_one_running_is_meant_for_a_read() {
         let m = machines(&[("a", 1), ("b", 6), ("c", 2)]);
-        assert_eq!(choose(&m, ASK), Ok(1));
+        assert_eq!(choose(&m, Use::Read, ASK), Ok(1));
     }
 
     #[test]
     fn the_only_machine_is_meant_even_off() {
-        assert_eq!(choose(&machines(&[("a", 1)]), ASK), Ok(0));
+        for how in [Use::Read, Use::Change] {
+            assert_eq!(choose(&machines(&[("a", 1)]), how, ASK), Ok(0));
+            assert_eq!(choose(&machines(&[("a", 6)]), how, ASK), Ok(0));
+        }
     }
 
     #[test]
-    fn otherwise_vma_name_is_asked_for() {
-        assert_eq!(choose(&[], ASK), Err("VirtualBox has no machine".into()));
+    fn a_change_never_guesses_among_several() {
         assert_eq!(
-            choose(&machines(&[("a", 1), ("b", 2)]), ASK),
+            choose(&machines(&[("a", 1), ("b", 6)]), Use::Change, ASK),
+            Err("this changes a machine, and there are several (a, b): name one with --machine NAME or VMA_NAME".into())
+        );
+        assert_eq!(
+            choose(
+                &machines(&[("a", 1), ("b", 2)]),
+                Use::Change,
+                "give machine"
+            ),
+            Err("this changes a machine, and there are several (a, b): give machine".into())
+        );
+    }
+
+    #[test]
+    fn otherwise_a_name_is_asked_for() {
+        for how in [Use::Read, Use::Change] {
+            assert_eq!(
+                choose(&[], how, ASK),
+                Err("VirtualBox has no machine".into())
+            );
+        }
+        assert_eq!(
+            choose(&machines(&[("a", 1), ("b", 2)]), Use::Read, ASK),
             Err("no machine is running, and there are several (a, b): name one with --machine NAME or VMA_NAME".into())
         );
         assert_eq!(
-            choose(&machines(&[("a", 6), ("b", 1), ("c", 7)]), "give machine"),
+            choose(
+                &machines(&[("a", 6), ("b", 1), ("c", 7)]),
+                Use::Read,
+                "give machine"
+            ),
             Err("several machines are running (a, c): give machine".into())
         );
     }
