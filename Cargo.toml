@@ -1,6 +1,6 @@
 [package]
 name        = "vma"
-version     = "0.1.1"
+version     = "0.1.2"
 edition     = "2024"
 authors     = ["Guilherme Madaleno"]
 description = "Use a VirtualBox machine as a person at it would: its screen, mouse and keyboard, and commands and files inside it."
