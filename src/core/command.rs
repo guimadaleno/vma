@@ -132,10 +132,10 @@ For an agent
 
   notices                   vma's licence and the third-party notices
 
-Named by neither --machine nor VMA_NAME, status, shot and a batch's pause,
-which only read, take the one running, or the only one there is; any other
-command takes only the only one there is, as one of several may be someone
-else's.
+--machine NAME goes after the command, as its other options do. Named by
+neither --machine nor VMA_NAME, status, shot and a batch's pause, which only
+read, take the one running, or the only one there is; any other command takes
+only the only one there is, as one of several may be someone else's.
 
 A lone -- before a command's first word ends its options, so a word after it
 may start with --, as in vma type -- --text. A picture or a file pulled goes
