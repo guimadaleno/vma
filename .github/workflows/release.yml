@@ -1,10 +1,10 @@
 # Cutting a tag builds vma and publishes it to download.guimadaleno.com with
 # the signed manifest. The executable is the whole release: the page offers
 # it as it is, a command-line tool that runs where it is put. The publishing
-# is guimadaleno/base's release action, the same for every app, kept here in
-# .github/actions/publish/ as base's release/README.md asks of a public app:
+# is guimadaleno/download's publish action, the same for every app, kept here in
+# .github/actions/publish/ as its README asks of a public app:
 # GitHub lends a private repository's actions only to other private ones.
-# release/README.md's "A new app" is what has to exist before the first tag
+# its README's "A new app" is what has to exist before the first tag
 # (the bucket, the R2 token, the release key and update.pub).
 #
 # Everything runs on Linux. The executable is the mingw cross-build, the same
@@ -153,7 +153,7 @@ jobs:
           cp dist/vma.exe "out/downloads/vma-$version.exe"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      # guimadaleno/base's release/publish at release-v1.4.1, unchanged.
+      # guimadaleno/download's publish/ at v1.4.1, unchanged.
       - name: Publish to download.guimadaleno.com
         uses: ./.github/actions/publish
         with:
