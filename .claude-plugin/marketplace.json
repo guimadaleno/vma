@@ -1,0 +1,14 @@
+{
+  "name": "vma",
+  "description": "Give an AI agent a VirtualBox machine: vma's skill for Claude Code.",
+  "owner": {
+    "name": "Guilherme Madaleno",
+    "url": "https://guimadaleno.com"
+  },
+  "plugins": [
+    {
+      "name": "vma",
+      "source": "./"
+    }
+  ]
+}

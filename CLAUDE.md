@@ -22,7 +22,8 @@ server (`vma mcp`).
   names. Departs from "the product speaks its users' language".
 - **Public:** a machine is "a machine", never its name. The only outside
   names: guimadaleno.com and its download host, the R2 endpoint in
-  `site.yml`, and the owner as the author (`LICENSE`, the page's footer).
+  `site.yml`, and the owner as the author (`LICENSE`, the page's footer,
+  `.claude-plugin/`).
 - **Notices:** `THIRD-PARTY-NOTICES.md`, compiled in and printed by
   `vma notices`, lists the crates the Windows build links: a crate added is
   added there in the same commit.

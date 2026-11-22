@@ -110,6 +110,17 @@ In Claude Code:
 claude mcp add vma -- /mnt/c/path/to/vma.exe mcp
 ```
 
+## Claude Code plugin
+
+A skill for an agent using vma: `vma help` first, a look at the screen
+before and after each act, the agent inside over pixels. It runs `vma`;
+with vma missing, and only with your OK, the line on guimadaleno.com/vma,
+which downloads `vma.exe` from download.guimadaleno.com:
+
+```
+/plugin install vma --marketplace guimadaleno/vma
+```
+
 ## Build
 
 On Linux or WSL, with Rust and `gcc-mingw-w64-x86-64`:
