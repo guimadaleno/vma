@@ -37,8 +37,8 @@ is in the issues: the goal #8 next, then the plans, #1 to #3.
 | `src/win/` | The Windows shell: COM by name (`dispatch.rs`), VirtualBox's machines, media, installer, console, mouse and keyboard (`vbox.rs`), the host's end of the agent, its shared folder (`link.rs`), the agent inside a machine (`agent.rs`), the commands, `batch` and the MCP server's loop, one session for a run (`mod.rs`). |
 | `dist.sh` | Builds `dist/vma.exe` and holds it to its 1 MB budget. |
 | `THIRD-PARTY-NOTICES.md` | The crates the Windows build links and their licences, compiled in and printed by `vma notices`: a crate added is added there in the same commit. |
-| `.github/workflows/release.yml` | A `v*` tag builds `dist.sh`'s executable and publishes it through base's `release/publish` to `download.guimadaleno.com/vma/`, and only on the owner's word. |
-| `.github/actions/publish/` | Base's `release/publish`, unchanged at the tag `release.yml` names, as a public repository can't use a private one's action: a change there is copied whole. |
+| `.github/workflows/release.yml` | A `v*` tag builds `dist.sh`'s executable and publishes it through guimadaleno/download's `publish` to `download.guimadaleno.com/vma/`, and only on the owner's word. |
+| `.github/actions/publish/` | guimadaleno/download's `publish/`, unchanged at the tag `release.yml` names, as a public repository can't use a private one's action: a change there is copied whole. |
 | `site/` | The page at `guimadaleno.com/vma/`, one file with no build step, and its icons; `.github/workflows/site.yml` publishes it to the bucket's `page/` on a push that touches it. Its version, size and checksum come from `latest.json`, so a release needs no change here. |
 | `tools/icon.py` | Draws the mark and writes the page's icons: run it after a change to the mark, and commit what it writes. |
 | `update.pub` | The public half of vma's release key, which the publish action checks the manifest's signature against; the private half is the `UPDATE_KEY` secret and the owner's offline backup. |
