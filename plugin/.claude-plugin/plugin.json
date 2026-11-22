@@ -1,5 +1,6 @@
 {
   "name": "vma",
+  "displayName": "VMA",
   "version": "1.0.0",
   "description": "Operate a VirtualBox machine with vma: its screen, mouse and keyboard, and scripts and files inside it.",
   "author": {
@@ -9,5 +10,12 @@
   "homepage": "https://guimadaleno.com/vma/",
   "repository": "https://github.com/guimadaleno/vma",
   "license": "MIT",
+  "keywords": [
+    "virtualbox",
+    "virtual-machine",
+    "windows",
+    "automation"
+  ],
+  "supportUrl": "https://github.com/guimadaleno/vma/issues",
   "icon": "./.claude-plugin/icon.png"
 }
