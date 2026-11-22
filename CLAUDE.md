@@ -26,7 +26,8 @@ server (`vma mcp`).
   the plugin's manifests).
 - **Plugin:** `plugin/`, listed by `.claude-plugin/marketplace.json`, holds
   only Markdown, JSON and images: Anthropic's plugin directory takes nothing
-  else from an unverified publisher.
+  else from an unverified publisher. Any change in it, a new copy of its
+  skill included, bumps `version` in its `plugin.json`: installs follow that.
 - **Notices:** `THIRD-PARTY-NOTICES.md`, compiled in and printed by
   `vma notices`, lists the crates the Windows build links: a crate added is
   added there in the same commit.
