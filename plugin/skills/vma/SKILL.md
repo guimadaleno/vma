@@ -14,4 +14,4 @@ Run `vma help` first: commands and options come from it, never memory. Missing: 
 - A machine created or destroyed only when asked.
 - VirtualBox only through `vma`; never a snapshot, which has frozen a machine.
 - A test machine: nothing private goes in it.
-- Stop the machine you started; frozen after a restart, a forced stop, then a start.
+- Stop the machine you started or were handed, unless a session waits for it: hand it over running, with what you opened closed. Frozen after a restart: a forced stop, then a start.
