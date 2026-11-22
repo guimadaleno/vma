@@ -17,5 +17,6 @@
     "automation"
   ],
   "supportUrl": "https://github.com/guimadaleno/vma/issues",
+  "privacyPolicyUrl": "https://github.com/guimadaleno/vma/blob/main/plugin/PRIVACY.md",
   "icon": "./.claude-plugin/icon.png"
 }
