@@ -23,7 +23,10 @@ server (`vma mcp`).
 - **Public:** a machine is "a machine", never its name. The only outside
   names: guimadaleno.com and its download host, the R2 endpoint in
   `site.yml`, and the owner as the author (`LICENSE`, the page's footer,
-  `.claude-plugin/`).
+  the plugin's manifests).
+- **Plugin:** `plugin/`, listed by `.claude-plugin/marketplace.json`, holds
+  only Markdown, JSON and images: Anthropic's plugin directory takes nothing
+  else from an unverified publisher.
 - **Notices:** `THIRD-PARTY-NOTICES.md`, compiled in and printed by
   `vma notices`, lists the crates the Windows build links: a crate added is
   added there in the same commit.

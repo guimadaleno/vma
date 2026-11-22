@@ -14,9 +14,9 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['README.md', 'CLAUDE.md', 'LICENSE', '.claude/**', '.claude-plugin/**', 'site/**', 'tools/icon.py']
+    paths-ignore: ['README.md', 'CLAUDE.md', 'LICENSE', '.claude/**', '.claude-plugin/**', 'plugin/**', 'site/**', 'tools/icon.py']
   pull_request:
-    paths-ignore: ['README.md', 'CLAUDE.md', 'LICENSE', '.claude/**', '.claude-plugin/**', 'site/**', 'tools/icon.py']
+    paths-ignore: ['README.md', 'CLAUDE.md', 'LICENSE', '.claude/**', '.claude-plugin/**', 'plugin/**', 'site/**', 'tools/icon.py']
   workflow_dispatch:
 
 # A newer push makes an older run's verdict moot.

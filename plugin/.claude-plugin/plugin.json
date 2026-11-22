@@ -8,6 +8,5 @@
   "homepage": "https://guimadaleno.com/vma/",
   "repository": "https://github.com/guimadaleno/vma",
   "license": "MIT",
-  "icon": "./.claude-plugin/icon.png",
-  "skills": "./.claude/skills/"
+  "icon": "./.claude-plugin/icon.png"
 }

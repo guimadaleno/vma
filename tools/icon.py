@@ -12,7 +12,7 @@ file comes from the same numbers as the page's own mark (site/index.html):
     site/vma-logo.svg   the small drawing on its tile, for the browser's tab
     site/vma-icon.png   256 px, for the site's list of tools and previews
     site/favicon.ico    16, 32 and 48 px
-    .claude-plugin/icon.png   512 px, the plugin's listing icon
+    plugin/.claude-plugin/icon.png   512 px, the plugin's listing icon
 
 Small sizes get their own drawing, heavier and with two keys, so the screen
 and its keys survive 16 px. Only the standard library: a PNG is a zlib
@@ -160,7 +160,7 @@ def main() -> None:
     (site / "vma-logo.svg").write_text(svg())
     (site / "vma-icon.png").write_bytes(png(256, render(256)))
     (site / "favicon.ico").write_bytes(ico([(size, png(size, render(size))) for size in (16, 32, 48)]))
-    (ROOT / ".claude-plugin" / "icon.png").write_bytes(png(512, render(512)))
+    (ROOT / "plugin" / ".claude-plugin" / "icon.png").write_bytes(png(512, render(512)))
 
 
 if __name__ == "__main__":

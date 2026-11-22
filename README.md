@@ -112,10 +112,8 @@ claude mcp add vma -- /mnt/c/path/to/vma.exe mcp
 
 ## Claude Code plugin
 
-A skill for an agent using vma: `vma help` first, a look at the screen
-before and after each act, the agent inside over pixels. It runs `vma`;
-with vma missing, and only with your OK, the line on guimadaleno.com/vma,
-which downloads `vma.exe` from download.guimadaleno.com:
+`plugin/` holds a skill for an agent using vma; its `README.md` says what
+it does and runs. In Claude Code:
 
 ```
 /plugin install vma --marketplace guimadaleno/vma
