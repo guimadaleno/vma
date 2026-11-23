@@ -10,6 +10,9 @@ Windows host with VirtualBox. When it is missing, the agent points you to
 vma's page, guimadaleno.com/vma, and installs it only with your OK. The skill
 sends nothing anywhere and reads no credential.
 
+Inside the machine the agent installs whatever the task needs without
+asking: give it a machine you can throw away, with nothing private in it.
+
 ```
 /plugin install vma --marketplace guimadaleno/vma
 ```

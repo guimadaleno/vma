@@ -1,7 +1,7 @@
 {
   "name": "vma",
   "displayName": "VMA",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Operate a VirtualBox machine with vma: its screen, mouse and keyboard, and scripts and files inside it.",
   "author": {
     "name": "Guilherme Madaleno",
